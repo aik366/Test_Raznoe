@@ -19,10 +19,10 @@ def main(freza=150, glubina=2.0):
 
 def blenda(freza=150, glubina=2.0):
     with open('DATA/bl_input.txt', 'r', encoding='utf-8') as f:
-        st = ''
-        temp = [i.split('\n\n')[:-1] for i in f.read().split(']')[1:]]
+        file, st = f.read() + "\n", ''
+        temp = [i.split('\n\n')[:-1] for i in file.split(']')[1:]]
         for i in temp:
-            t_x, t_y = 0.0, 0.0
+            t_x, t_y, tmp_KA = 0.0, 0.0, 0.0
             st += (
                 f'@ ROUT, 0 : "{freza}", 0, "1", 0, {glubina}, "", 1, 18, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, '
                 f'0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, -1, 0, 5000, 18000, 0, 8000, "{freza}", 103, 1, 0, 0, 90, 0, 0, 0, 0, 0, 0, '
@@ -34,8 +34,8 @@ def blenda(freza=150, glubina=2.0):
                     start_x, start_y = sp_start[0].replace('l', 'LPX')[2:], sp_start[1].replace('w', 'LPY')[2:]
                     st += f'  @ START_POINT, 0 : {start_x}, {start_y}, 0\n'
                 else:
-                    sp = j.split('\n')[2:4]
-                    line_x, line_y = sp[0].replace('l', 'LPX')[2:], sp[1].replace('w', 'LPY')[2:]
+                    sp = j.split('\n')[1:]
+                    line_x, line_y = sp[1].replace('l', 'LPX')[2:], sp[2].replace('w', 'LPY')[2:]
                     if line_x[0] == '@':
                         l_x = float(line_x[1:]) + t_x
                         t_x = l_x
@@ -44,7 +44,20 @@ def blenda(freza=150, glubina=2.0):
                         l_y = float(line_y[1:]) + t_y
                         t_y = l_y
                         line_y = f'{start_y}+({l_y:.3f})'
-                    st += f'  @ LINE_EP, 0 : {line_x}, {line_y}, 0, 0, 0, 0, 0, 0, 0\n'
+                    if sp[0] == 'KL':
+                        st += f'  @ LINE_EP, 0 : {line_x}, {line_y}, 0, 0, 0, 0, 0, 0, 0\n'
+                    elif sp[0] == 'KA':
+                        ds = sp[4][3]
+                        tmp1 = '2' if ds in ('0', '2') else '1'
+                        if tmp1 == '2':
+                            if ds == '0':
+                                tmp2 = '1' if (t_x-tmp_KA) > 0.0 else '0'
+                            else:
+                                tmp2 = '1' if (t_x - tmp_KA) < 0.0 else '0'
+                        else:
+                            tmp2 = '1' if (t_x - tmp_KA) < 0.0 else '0'
+                        tmp_KA = t_x
+                        st += f'  @ ARC_EPRA, 0 : {line_x}, {line_y}, {sp[5][2:]}, {tmp1}, 0, 0, 0, 0, 0, {tmp2}\n'
             st += '  @ ENDPATH, 0 :\n\n'
     print(st)
     with open('DATA/bl_output.txt', 'w') as f:
