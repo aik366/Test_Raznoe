@@ -44,9 +44,9 @@ def blenda(freza=150, glubina=2.0):
                         l_y = float(line_y[1:]) + t_y
                         t_y = l_y
                         line_y = f'{start_y}+({l_y:.3f})'
-                    if sp[0] == 'KL':
+                    if sp[0].strip() == 'KL':
                         st += f'  @ LINE_EP, 0 : {line_x}, {line_y}, 0, 0, 0, 0, 0, 0, 0\n'
-                    elif sp[0] == 'KA':
+                    elif sp[0].strip() == 'KA':
                         ds = sp[4][3]
                         tmp1 = '2' if ds in ('0', '2') else '1'
                         if tmp1 == '2':
@@ -66,4 +66,4 @@ def blenda(freza=150, glubina=2.0):
 
 if __name__ == '__main__':
     # main(144, 4)
-    blenda(136, 1.5)
+    blenda(136, 2)
