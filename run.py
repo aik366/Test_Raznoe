@@ -1,9 +1,11 @@
 import json
 
+PATH_DB = r'\\office\фасады мдф\Dati_c\dati\DAT.DB'
+
 
 def main():
     d = {}
-    with open('DATA/DAT.DB', 'r') as f:
+    with open(PATH_DB, 'r') as f:
         for i in f.read().replace("' ПЛЕНКА", "!").split('!')[1].strip().split('\n'):
             temp = i.split('|')
             d[temp[0]] = [temp[1].capitalize(), temp[2]]
