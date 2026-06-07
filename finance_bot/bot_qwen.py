@@ -1,4 +1,3 @@
-import os
 import sqlite3
 from datetime import datetime
 from collections import defaultdict
@@ -9,9 +8,10 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from config import BOT_TOKEN
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = "5325871763:AAFEfyfhVl3xaWLsczChHL-yiN1keMRQl8Y"  # Замените на ваш токен
+BOT_TOKEN = BOT_TOKEN  # Замените на ваш токен
 DB_NAME = "finance.db"
 
 # Словарь для вывода месяцев на русском

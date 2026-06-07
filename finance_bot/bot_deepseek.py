@@ -7,9 +7,10 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from config import BOT_TOKEN
 
 # Конфигурация
-API_TOKEN = '5325871763:AAFEfyfhVl3xaWLsczChHL-yiN1keMRQl8Y'  # Замените на ваш токен
+API_TOKEN = BOT_TOKEN  # Замените на ваш токен
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher()
 
