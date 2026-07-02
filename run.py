@@ -18,9 +18,9 @@ def main():
     with open(PATH_FASAD_DB, 'r') as file:
         dict_fasad = {}
         for i in file.read().split('\n'):
-            fasad_split = i.split('|')
             if i[0] == 'К':
                 break
+            fasad_split = i.split('|')
             dict_fasad[fasad_split[0]] = int(fasad_split[19])
     
         write_json(PATH_FAZAD_JSON, dict_fasad)
