@@ -1,35 +1,58 @@
 import json
-
-PATH_IN = r'\\office\\фасады мдф\\Dati_c\\dati'
-PATH_OUT = r'\\Office\\555\bimgorbot\\price'
-PATH_DATA = 'DATA\data.json'
+from config import PATH_DAT_DB, PATH_FASAD_DB, PATH_DATA_JSON, PATH_PLENKA_JSON, PATH_FAZAD_JSON
 
 
+# Запись словаря в JSON
+def write_json(filename, collection):
+    with open(filename, 'w', encoding='utf-8') as file:
+        json.dump(collection, file, ensure_ascii=False, indent=4)
+
+
+# Чтение словаря из JSON
+def read_json(filename):
+    with open(filename, encoding='utf-8') as file:
+        return json.load(file)
+   
+   
 def main():
-    d = {}
-    with open(f"{PATH_IN}\DAT.DB", 'r') as f:
-        f_read = f.read().replace("' ПЛЕНКА", "!").split('!')
-        # for i in f_read[1].strip().split('\n'):
-        #     temp = i.split('|')
-        #     d[temp[0]] = [temp[1].capitalize(), temp[2]]
-        
-        with open(PATH_DATA, encoding='utf-8') as file:
-            dct = json.load(file)
-            
-        for n, i in enumerate(f_read[0].strip().split('\n')[6:18], 1):
-            dct["plenka"][n] = int(i)
-            
-        with open(PATH_DATA, 'w', encoding='utf-8') as f:
-            json.dump(dct, f, ensure_ascii=False, indent=4)
-            
-        # with open(PATH_DATA, encoding='utf-8') as file:
-        #     dct = json.load(file)
-        #     for i in dct["plenka"]:
-        #         print(i)
+    with open(PATH_FASAD_DB, 'r') as file:
+        dict_fasad = {}
+        for i in file.read().split('\n'):
+            if i[0] == 'К':
+                break
+            fasad_split = i.split('|')
+            dict_fasad[fasad_split[0]] = int(fasad_split[19])
+    
+        write_json(PATH_FAZAD_JSON, dict_fasad)
 
-    # with open(f"{PATH_OUT}\plenka.json", 'w', encoding='utf-8') as f:
-    #     json.dump(d, f, ensure_ascii=False, indent=4)
+
+    with open(PATH_DAT_DB, 'r') as f:
+        dict_write = {}
+        f_read = f.read().replace("' ПЛЕНКА", "!").split('!')
+        for i in f_read[1].strip().split('\n'):
+            temp = i.split('|')
+            dict_write[temp[0]] = [temp[1].capitalize(), temp[4]]
+
+        write_json(PATH_PLENKA_JSON, dict_write)
+        
+        dict_read = read_json(PATH_DATA_JSON)
+        for n, i in enumerate(f_read[0].strip().split('\n')[0:42]):
+            if 6 <= n < 18:
+                dict_read["plenka"][n-5] = int(i)
+            if 28 <= n < 34:
+                dict_read["zak_fz_kz"][n-28] = int(i)
+            if n == 39:
+                dict_read["tolshina"]["19"] = int(i)
+            if n == 3:
+                dict_read["tolshina"]["22"] = int(i)
+            if n == 4:
+                dict_read["tolshina"]["32"] = int(i)
+  
+        write_json(PATH_DATA_JSON, dict_read)
+        
+        
 
 
 if __name__ == '__main__':
     main()
+    print("Файл успешно записан")
