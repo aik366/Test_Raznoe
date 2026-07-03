@@ -1,5 +1,6 @@
 import json
-from config import PATH_DAT_DB, PATH_FASAD_DB, PATH_DATA_JSON, PATH_PLENKA_JSON, PATH_FAZAD_JSON
+import shutil
+from config import PATH_DATA, PATH_DAT_DB, PATH_FASAD_DB, PATH_DATA_JSON, PATH_PLENKA_JSON, PATH_FAZAD_JSON
 
 
 # Запись словаря в JSON
@@ -15,7 +16,9 @@ def read_json(filename):
    
    
 def main():
-    with open(PATH_FASAD_DB, 'r') as file:
+    shutil.copyfile(PATH_FASAD_DB, PATH_DATA / "Fasad.DB",)
+    shutil.copyfile(PATH_DAT_DB, PATH_DATA / "DAT.DB")
+    with open(PATH_DATA / "Fasad.DB", 'r') as file:
         dict_fasad = {}
         for i in file.read().split('\n'):
             if i[0] == 'К':
@@ -26,7 +29,7 @@ def main():
         write_json(PATH_FAZAD_JSON, dict_fasad)
 
 
-    with open(PATH_DAT_DB, 'r') as f:
+    with open(PATH_DATA / "DAT.DB", 'r') as f:
         dict_write = {}
         f_read = f.read().replace("' ПЛЕНКА", "!").split('!')
         for i in f_read[1].strip().split('\n'):
