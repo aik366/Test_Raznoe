@@ -1,0 +1,268 @@
+"""
+Раскладка маршрутов из st.txt по окну: per.txt (окно 6), per4.txt (окно 4),
+per8.txt (окно 8) и так далее для любого чётного окна.
+
+Как устроена раскладка
+----------------------
+st.txt содержит маршруты (блоки «@ ROUT … @ ENDPATH») для одного окна.
+Для окна N каждый маршрут повторяется N раз и раскладывается сеткой из двух
+рядов по N/2 колонок. Порядок копий важен — его задаёт система координат станка:
+
+    верхний ряд, слева направо:   "", dx1, dx2, … dx(N/2-1)
+    нижний ряд, справа налево:    dx(N/2-1)+dy1, …, dx1+dy1, dy1
+
+Смещение подставляется в начало координатных выражений X и Y в строках
+START_POINT и LINE_EP, например:
+
+    RAMX+OBV6+50   ->  dx1+RAMX+OBV6+50
+    lpx-RAMX-OBV6  ->  dx1+lxp-RAMX-OBV6
+    RAMY+OBV6      ->  dy1+RAMY+OBV6
+
+Заодно имена переменных приводятся к виду, который ждёт постпроцессор:
+lpx -> lxp, lpy -> lyp.
+
+Строки между маршрутами (пустые и комментарии вида «' kray18») сохраняются
+и попадают в результат после последней копии маршрута; пробелы в конце строк
+обрезаются. Между копиями одного маршрута всегда стоит одна пустая строка.
+
+Использование
+-------------
+    python test_pereplet.py                 # окно 6  -> per.txt
+    python test_pereplet.py --window 4      # окно 4  -> per4.txt
+    python test_pereplet.py --window 10     # окно 10 -> per10.txt
+    python test_pereplet.py --window 8 --out D:\\tmp\\per8.txt
+    python test_pereplet.py --check         # сверить окна 4, 6, 8 с готовыми файлами
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+# --- настройки по умолчанию -------------------------------------------------
+
+SRC = Path(r"D:\bimgor\Bimgor_MDF\rs\123_it\st.txt")
+WINDOW = 6
+CHECK_WINDOWS = (4, 6, 8)
+
+# --- разбор st.txt ----------------------------------------------------------
+
+ROUT_RE = re.compile(r"^\s*@\s*ROUT\b")
+END_RE = re.compile(r"^\s*@\s*ENDPATH\b")
+COORD_RE = re.compile(r"^(\s*@\s*(?:START_POINT|LINE_EP)\s*,[^:]*:\s*)(.*)$")
+LXY_RE = re.compile(r"\b(lpx|lpy)\b")
+LXY_MAP = {"lpx": "lxp", "lpy": "lyp"}
+
+
+class Source:
+    """Разобранный st.txt: маршруты и разделители между ними."""
+
+    def __init__(self, routes: list[list[str]], separators: list[list[str]], tail: list[str]):
+        self.routes = routes          # блоки маршрутов
+        self.separators = separators  # separators[i] — строки перед маршрутом i
+        self.tail = tail              # строки после последнего маршрута
+
+
+def read_source(path: Path) -> Source:
+    text = path.read_text(encoding="utf-8")
+    routes: list[list[str]] = []
+    separators: list[list[str]] = []
+    pending: list[str] = []
+    current: list[str] | None = None
+
+    for raw in text.splitlines():
+        line = raw.rstrip()
+
+        if ROUT_RE.match(line):
+            if current is not None:
+                raise ValueError(f"в {path} маршрут не закрыт строкой @ ENDPATH")
+            separators.append(pending)
+            pending = []
+            current = [line]
+        elif current is not None:
+            current.append(line)
+            if END_RE.match(line):
+                routes.append(current)
+                current = None
+        else:
+            pending.append(line)
+
+    if current is not None:
+        raise ValueError(f"в {path} маршрут не закрыт строкой @ ENDPATH")
+    if not routes:
+        raise ValueError(f"в {path} не найдено ни одного маршрута @ ROUT")
+
+    return Source(routes, separators, pending)
+
+
+# --- преобразование строк ---------------------------------------------------
+
+def rename_axes(line: str) -> str:
+    """lpx -> lxp, lpy -> lyp (так эти имена ждёт постпроцессор)."""
+    return LXY_RE.sub(lambda m: LXY_MAP[m.group(1)], line)
+
+
+def add_offset(line: str, dx: str, dy: str) -> str:
+    """Добавляет dx к координате X и dy к координате Y в строке START_POINT/LINE_EP."""
+    match = COORD_RE.match(line)
+    if not match:
+        return line
+
+    head, body = match.group(1), match.group(2)
+    parts = body.split(",", 2)
+    if len(parts) < 2:
+        return line
+
+    x = parts[0].strip()
+    y = parts[1].strip()
+    tail = parts[2] if len(parts) == 3 else ""
+
+    if dx:
+        x = f"{dx}+{x}"
+    if dy:
+        y = f"{dy}+{y}"
+
+    return f"{head}{x}, {y},{tail}"
+
+
+def grid_offsets(window: int) -> list[tuple[str, str]]:
+    """Порядок ячеек сетки: пара (dx, dy) для каждой копии маршрута."""
+    if window < 2 or window % 2:
+        raise ValueError(f"окно должно быть чётным и не меньше 2, получено {window}")
+
+    cols = window // 2
+    cells: list[tuple[str, str]] = []
+
+    # верхний ряд: слева направо
+    for i in range(cols):
+        cells.append((f"dx{i}" if i else "", ""))
+    # нижний ряд: справа налево
+    for i in range(cols - 1, -1, -1):
+        cells.append((f"dx{i}" if i else "", "dy1"))
+
+    return cells
+
+
+# --- сборка результата -------------------------------------------------------
+
+def render_route(route: list[str], dx: str, dy: str) -> list[str]:
+    """Одна копия маршрута со смещением (dx, dy)."""
+    lines = [add_offset(rename_axes(route[0]), dx, dy)]
+    for line in route[1:]:
+        line = rename_axes(line)
+        if not END_RE.match(line):
+            line = add_offset(line, dx, dy)
+        lines.append(line)
+    return lines
+
+
+def build(source: Source, window: int) -> str:
+    """Собирает текст per-файла для заданного окна (CRLF, как в исходниках)."""
+    cells = grid_offsets(window)
+    out: list[str] = list(source.separators[0])
+
+    for index, route in enumerate(source.routes):
+        for cell, (dx, dy) in enumerate(cells):
+            if cell:
+                out.append("")
+            out.extend(render_route(route, dx, dy))
+        out.extend(source.separators[index + 1] if index + 1 < len(source.separators) else source.tail)
+
+    return "\r\n".join(out) + "\r\n"
+
+
+def target_name(window: int) -> str:
+    """Имя файла: окно 6 — per.txt, остальные — per<N>.txt."""
+    return "per.txt" if window == 6 else f"per{window}.txt"
+
+
+# --- проверка против готовых файлов -----------------------------------------
+
+def compare(reference: list[str], generated: list[str]) -> list[str]:
+    """Краткий отчёт о расхождениях (пусто, если тексты совпадают)."""
+    problems: list[str] = []
+
+    if len(reference) != len(generated):
+        problems.append(f"строк: в файле {len(reference)}, сгенерировано {len(generated)}")
+
+    pairs = [
+        (number, ref, got)
+        for number, (ref, got) in enumerate(zip(reference, generated), start=1)
+        if ref.rstrip() != got.rstrip()
+    ]
+    if pairs:
+        problems.append(f"различаются строк: {len(pairs)}")
+        seen: set[tuple[str, str]] = set()
+        for number, ref, got in pairs:
+            if (ref, got) in seen:
+                continue
+            seen.add((ref, got))
+            problems.append(f"  строка {number}:\n    файл: {ref!r}\n    наше: {got!r}")
+            if len(seen) >= 5:
+                break
+    return problems
+
+
+def run_check(source: Source, folder: Path, windows: tuple[int, ...]) -> int:
+    failed = 0
+
+    for window in windows:
+        path = folder / target_name(window)
+        if not path.exists():
+            print(f"{target_name(window)} (окно {window}): файла нет")
+            failed += 1
+            continue
+
+        reference = path.read_text(encoding="utf-8").splitlines()
+        problems = compare(reference, build(source, window).splitlines())
+        print(f"{target_name(window)} (окно {window}): {'OK' if not problems else 'РАСХОЖДЕНИЯ'}")
+        for problem in problems:
+            print(f"  {problem}")
+        failed += bool(problems)
+
+    return 1 if failed else 0
+
+
+# --- точка входа -------------------------------------------------------------
+
+def main(argv: list[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
+
+    parser = argparse.ArgumentParser(description="Раскладывает маршруты st.txt по окну (per*.txt).")
+    parser.add_argument("--src", type=Path, default=SRC, help=f"исходный st.txt (по умолчанию {SRC})")
+    parser.add_argument("--window", type=int, default=WINDOW, help=f"размер окна (по умолчанию {WINDOW})")
+    parser.add_argument("--out", type=Path, default=None, help="куда писать результат")
+    parser.add_argument(
+        "--check",
+        nargs="*",
+        type=int,
+        metavar="N",
+        help=f"сверить с готовыми файлами (по умолчанию окна {', '.join(map(str, CHECK_WINDOWS))})",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        source = read_source(args.src)
+
+        if args.check is not None:
+            windows = tuple(args.check) if args.check else CHECK_WINDOWS
+            return run_check(source, args.src.parent, windows)
+
+        text = build(source, args.window)
+        out = args.out or (args.src.parent / target_name(args.window))
+        out.write_bytes(text.encode("utf-8"))
+        print(f"{out} — маршрутов: {len(source.routes)}, копий каждого: {args.window}")
+        return 0
+    except (OSError, ValueError) as error:
+        print(f"ошибка: {error}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
